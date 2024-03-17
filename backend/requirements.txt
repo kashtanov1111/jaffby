@@ -1,0 +1,5 @@
+fastapi==0.110.0
+uvicorn[standard]==0.28.0
+langserve[server]==0.0.51
+langchain==0.1.12
+langchain-openai==0.0.8
