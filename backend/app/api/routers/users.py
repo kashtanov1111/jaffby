@@ -1,26 +1,40 @@
-from fastapi import APIRouter
+import asyncio
+
+from fastapi import APIRouter, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Callable, Annotated
 
 from fastapi import Depends, HTTPException
-from core.database import SessionLocal  # type: ignore
-from crud.users import get_user_by_id  # type: ignore
-from schemas.users import UserSchema  # type: ignore
-
+from core.database import SessionLocal
+from crud.users import (
+    get_user_by_id,
+    get_user_by_email,
+    get_user_by_username,
+    create_user,
+)
+from schemas.users import UserSchema, UserCreateSchema
+from .auth.dependencies import (
+    get_current_active_user,
+    csrftoken_check,
+)
 
 router = APIRouter()
 
 
-async def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+@router.put(
+    "/update_user_profile",
+    dependencies=[
+        Depends(get_current_active_user),
+        Depends(csrftoken_check),
+    ],
+)
+async def update_user_profile_route():
+    return "fake updated user profile alright"
 
 
-@router.get("/{user_id}", response_model=UserSchema)
-async def read_user(user_id: str, db: AsyncSession = Depends(get_db)):
-    db_user = await get_user_by_id(db, user_id=user_id)
-    if db_user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    return db_user
+# @router.get("/{user_id}", response_model=UserSchema)
+# async def get_user_by_id_route(user_id: str, db: AsyncSession = Depends(get_session)):
+#     db_user = await get_user_by_id(db, user_id=user_id)
+#     if db_user is None:
+#         raise HTTPException(status_code=404, detail="User not found")
+#     return db_user

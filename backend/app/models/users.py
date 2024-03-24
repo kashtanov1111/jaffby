@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import Column, String, Boolean
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import DateTime, func
 
@@ -19,3 +20,5 @@ class User(Base):
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=func.now())
+
+    refresh_tokens = relationship("RefreshToken", back_populates="user")
