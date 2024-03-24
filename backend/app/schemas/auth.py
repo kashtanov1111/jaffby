@@ -18,3 +18,19 @@ class RefreshTokenSchema(RefreshTokenBaseSchema):
     revoked: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ConfirmationTokenBase(BaseModel):
+    token: str
+    user_id: UUID
+    created_at: datetime
+    expires_at: datetime
+
+
+class ConfirmationTokenCreate(ConfirmationTokenBase):
+    pass
+
+
+class ConfirmationToken(ConfirmationTokenBase):
+    id: UUID
+    id_used: bool

@@ -1,6 +1,8 @@
+import secrets
 import uuid
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
+from pydantic import EmailStr
 
 from fastapi import Response, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,10 +10,11 @@ from jose import jwt  # type: ignore
 
 from core.settings import settings
 from crud.users import get_user_by_username
-from crud.auth import create_refresh_token
-from schemas.auth import RefreshTokenCreateSchema
+from crud.auth import create_refresh_token, create_confirmation_token
+from schemas.auth import RefreshTokenCreateSchema, ConfirmationTokenCreate
 from models.users import User
 from core.security import generate_csrf_token, verify_password
+from core.utils import send_email_async
 
 
 async def clear_auth_cookies_in_response(response: Response) -> None:
@@ -102,3 +105,33 @@ async def create_tokens_and_set_auth_cookies_in_response(
     )
     await create_refresh_token(db, refresh_token_to_db)
     await set_auth_cookies_in_response(response, access_token, refresh_token)
+
+
+async def generate_and_store_confirmation_token(db: AsyncSession, user_id: str) -> str:
+    token = secrets.token_urlsafe()
+    created_at_with_timezone = datetime.now(timezone.utc)
+    expires_at = created_at_with_timezone + timedelta(
+        # seconds=5
+        hours=settings.CONFIRMATION_TOKEN_EXPIRE_HOURS
+    )
+    expires_at = expires_at.replace(tzinfo=None)
+    created_at = created_at_with_timezone.replace(tzinfo=None)
+
+    confirmation_token_to_db = ConfirmationTokenCreate(
+        token=token, user_id=UUID(user_id), created_at=created_at, expires_at=expires_at
+    )
+    await create_confirmation_token(db, confirmation_token_to_db)
+    return token
+
+
+async def send_confirmation_email(email: EmailStr, token: str) -> None:
+    if settings.DEBUG == True:
+        confirmation_url = "http://localhost"
+    else:
+        confirmation_url = f"https://{settings.DOMAIN_NAME}"
+    confirmation_url += settings.API_VERSION_STR + f"/confirm?token={token}"
+    await send_email_async(
+        recipient_email=email,
+        subject="Confirm your email",
+        body=f"Please click the following link to confirm your email address: {confirmation_url}",
+    )

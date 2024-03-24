@@ -4,7 +4,8 @@ from pydantic_settings import BaseSettings  # type: ignore
 
 class Settings(BaseSettings):
     APP_NAME: str = "Jaffby App Server"
-    API_V1_STR: str = "/api/v1"
+    API_VERSION_STR: str = "/api/v1"
+    DOMAIN_NAME: str = "jaffby.com"
     POSTGRES_USER: str | None = os.getenv("POSTGRES_USER")
     POSTGRES_PASSWORD: str | None = os.getenv("POSTGRES_PASSWORD")
     POSTGRES_DB: str | None = os.getenv("POSTGRES_DB")
@@ -13,6 +14,11 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 900
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     JWT_ENCODING_ALGORITHM: str = "HS256"
+    SMTP_HOST_USER: str | None = os.getenv("SMTP_HOST_USER")
+    SMTP_HOST_PASSWORD: str | None = os.getenv("SMTP_HOST_PASSWORD")
+    SMTP_HOST: str | None = os.getenv("SMTP_HOST")
+    SMTP_PORT: int = 587
+    CONFIRMATION_TOKEN_EXPIRE_HOURS: int = 24
 
 
 settings = Settings()

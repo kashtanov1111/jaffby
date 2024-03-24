@@ -12,5 +12,5 @@ pydantic-settings==2.2.1
 langserve[server]==0.0.51
 langchain==0.1.12
 langchain-openai==0.0.8
-
+aiosmtplib==3.0.1
 

@@ -2,6 +2,7 @@ from pydantic import EmailStr
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import update
 
 from models.users import User
 from schemas.users import UserCreateSchema
@@ -35,3 +36,15 @@ async def create_user(db: AsyncSession, user: UserCreateSchema) -> User:
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
+
+async def set_is_email_confirmed_and_is_active_true_on_user(
+    db: AsyncSession, user_id: str
+) -> None:
+    update_user = (
+        update(User)
+        .where(User.id == user_id)
+        .values(is_email_confirmed=True, is_active=True)
+    )
+    await db.execute(update_user)
+    await db.commit()
