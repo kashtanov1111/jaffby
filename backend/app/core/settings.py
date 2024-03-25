@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     SMTP_HOST_PASSWORD: str | None = os.getenv("SMTP_HOST_PASSWORD")
     SMTP_HOST: str | None = os.getenv("SMTP_HOST")
     SMTP_PORT: int = 587
-    CONFIRMATION_TOKEN_EXPIRE_HOURS: int = 24
+    EMAIL_CONFIRMATION_TOKEN_EXPIRE_HOURS: int = 24
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
 
 
 settings = Settings()

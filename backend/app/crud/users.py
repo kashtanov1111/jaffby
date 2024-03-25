@@ -48,3 +48,11 @@ async def set_is_email_confirmed_and_is_active_true_on_user(
     )
     await db.execute(update_user)
     await db.commit()
+
+
+async def update_user_password(db: AsyncSession, new_password: str, user_id: str):
+    hashed_password = await get_password_hash(new_password)
+    await db.execute(
+        update(User).where(User.id == user_id).values(hashed_password=hashed_password)
+    )
+    await db.commit()

@@ -1,3 +1,4 @@
+import re
 import asyncio
 import secrets
 
@@ -16,3 +17,20 @@ async def get_password_hash(password) -> str:
 
 async def generate_csrf_token() -> str:
     return secrets.token_hex(16)
+
+
+def check_password(password: str) -> str:
+    min_length = 8
+    if len(password) < min_length:
+        raise ValueError(f"Password must be at least {min_length} characters long.")
+    if not re.search("[a-z]", password):
+        raise ValueError("Password must include lowercase letters.")
+    if not re.search("[A-Z]", password):
+        raise ValueError("Password must include uppercase letters.")
+    if not re.search("[0-9]", password):
+        raise ValueError("Password must include digits.")
+    if not re.search('[!@#$%^&*(),.?":{}|<>]', password):
+        raise ValueError(
+            'Password must include special characters (!@#$%^&*(),.?":{}|<>).'
+        )
+    return password

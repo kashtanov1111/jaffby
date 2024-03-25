@@ -1,4 +1,4 @@
-import __init__
+import __init__  # type: ignore
 import asyncio
 
 from core.utils import send_email_async

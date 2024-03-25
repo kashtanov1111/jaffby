@@ -10,8 +10,8 @@ from jose import jwt  # type: ignore
 
 from core.settings import settings
 from crud.users import get_user_by_username
-from crud.auth import create_refresh_token, create_confirmation_token
-from schemas.auth import RefreshTokenCreateSchema, ConfirmationTokenCreate
+from crud.auth import create_refresh_token, create_token_for_email
+from schemas.auth import RefreshTokenCreateSchema, TokenForEmailCreate
 from models.users import User
 from core.security import generate_csrf_token, verify_password
 from core.utils import send_email_async
@@ -107,31 +107,43 @@ async def create_tokens_and_set_auth_cookies_in_response(
     await set_auth_cookies_in_response(response, access_token, refresh_token)
 
 
-async def generate_and_store_confirmation_token(db: AsyncSession, user_id: str) -> str:
+async def generate_and_store_token_for_email(
+    db: AsyncSession, user_id: str, is_for_password_reset: bool
+) -> str:
+    if is_for_password_reset:
+        exp_timedelta = timedelta(minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES)
+    else:
+        exp_timedelta = timedelta(hours=settings.EMAIL_CONFIRMATION_TOKEN_EXPIRE_HOURS)
     token = secrets.token_urlsafe()
     created_at_with_timezone = datetime.now(timezone.utc)
-    expires_at = created_at_with_timezone + timedelta(
-        # seconds=5
-        hours=settings.CONFIRMATION_TOKEN_EXPIRE_HOURS
-    )
+    expires_at = created_at_with_timezone + exp_timedelta
+
     expires_at = expires_at.replace(tzinfo=None)
     created_at = created_at_with_timezone.replace(tzinfo=None)
 
-    confirmation_token_to_db = ConfirmationTokenCreate(
+    token_for_email_to_db = TokenForEmailCreate(
         token=token, user_id=UUID(user_id), created_at=created_at, expires_at=expires_at
     )
-    await create_confirmation_token(db, confirmation_token_to_db)
+    await create_token_for_email(db, token_for_email_to_db, is_for_password_reset)
     return token
 
 
-async def send_confirmation_email(email: EmailStr, token: str) -> None:
+async def send_email_with_token(
+    email: EmailStr, token: str, is_for_reset_password: bool
+) -> None:
     if settings.DEBUG == True:
-        confirmation_url = "http://localhost"
+        url_with_token = "http://localhost"
     else:
-        confirmation_url = f"https://{settings.DOMAIN_NAME}"
-    confirmation_url += settings.API_VERSION_STR + f"/confirm?token={token}"
-    await send_email_async(
-        recipient_email=email,
-        subject="Confirm your email",
-        body=f"Please click the following link to confirm your email address: {confirmation_url}",
-    )
+        url_with_token = f"https://{settings.DOMAIN_NAME}"
+    url_with_token += settings.API_VERSION_STR
+    if is_for_reset_password:
+        url_with_token += f"/reset-password?token={token}"
+        subject = "Reset your password"
+        body = (
+            f"Please click the following link to reset your password: {url_with_token}"
+        )
+    else:
+        url_with_token += f"/confirm-email?token={token}"
+        subject = "Confirm your email"
+        body = f"Please click the following link to confirm your email address: {url_with_token}"
+    await send_email_async(recipient_email=email, subject=subject, body=body)

@@ -1,6 +1,15 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+import re
+from pydantic import BaseModel, ConfigDict, EmailStr, validator
 from uuid import UUID
 from datetime import datetime
+
+from core.security import check_password
+
+
+class PasswordMixin(BaseModel):
+    @validator("password", check_fields=False)
+    def validate_password(cls, password):
+        return check_password(password)
 
 
 class UserBaseSchema(BaseModel):
@@ -8,7 +17,7 @@ class UserBaseSchema(BaseModel):
     username: str
 
 
-class UserCreateSchema(UserBaseSchema):
+class UserCreateSchema(PasswordMixin, UserBaseSchema):
     password: str
 
 
@@ -20,3 +29,7 @@ class UserSchema(UserBaseSchema):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserPasswordResetSchema(PasswordMixin, BaseModel):
+    password: str

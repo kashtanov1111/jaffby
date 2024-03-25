@@ -25,9 +25,15 @@ class User(Base):
     refresh_tokens = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete, delete-orphan"
     )
-    confirmation_tokens = relationship(
-        "ConfirmationToken",
+    email_confirmation_tokens = relationship(
+        "EmailConfirmationToken",
         back_populates="user",
-        order_by="ConfirmationToken.created_at",
+        order_by="EmailConfirmationToken.created_at",
+        cascade="all, delete, delete-orphan",
+    )
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        order_by="PasswordResetToken.created_at",
         cascade="all, delete, delete-orphan",
     )

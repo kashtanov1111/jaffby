@@ -22,6 +22,7 @@ async def send_email_async(recipient_email: EmailStr, subject: str, body: str) -
         print("------------------------------")
         print("------------------------------")
         print(f"You: {recipient_email} received an email, with this body:")
+        print(message)
         print(body)
         print("------------------------------")
         print("------------------------------")

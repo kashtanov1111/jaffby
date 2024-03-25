@@ -1,4 +1,5 @@
 from typing import Annotated
+from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import APIKeyCookie, APIKeyHeader
@@ -9,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.settings import settings
 from core.utils import get_db_session
 from crud.users import get_user_by_id
-from crud.auth import get_refresh_token_by_id, set_revoke_status_to_true_refresh_token
+from crud.auth import (
+    get_refresh_token_by_id,
+    set_revoke_status_to_true_refresh_token,
+    get_token_from_email_by_token,
+)
 from models.users import User
 
 
@@ -88,3 +93,32 @@ async def validate_refresh_token_and_set_revoked_true(
         raise credentials_exception
     await set_revoke_status_to_true_refresh_token(db, id)
     return str(refresh_token_from_db.user_id)
+
+
+class TokenFromEmailValidator:
+    def __init__(self, is_for_reset_password: bool):
+        self.is_for_reset_password = is_for_reset_password
+
+    async def __call__(
+        self, token: str, db: AsyncSession = Depends(get_db_session)
+    ) -> tuple[str, str, AsyncSession]:
+        token_from_db = await get_token_from_email_by_token(
+            db, token, self.is_for_reset_password
+        )
+        current_time = datetime.now(timezone.utc).replace(tzinfo=None)
+        if (
+            token_from_db is None
+            or token_from_db.is_used == True
+            or token_from_db.expires_at <= current_time
+        ):
+            detail = (
+                "Wrong email confirmation token."
+                if not self.is_for_reset_password
+                else "Wrong password reset token."
+            )
+            raise HTTPException(status_code=400, detail=detail)
+        return (
+            str(token_from_db.id),
+            str(token_from_db.user_id),
+            db,
+        )

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr
+from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from datetime import datetime
 
@@ -20,17 +20,17 @@ class RefreshTokenSchema(RefreshTokenBaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ConfirmationTokenBase(BaseModel):
+class TokenForEmailBase(BaseModel):
     token: str
     user_id: UUID
     created_at: datetime
     expires_at: datetime
 
 
-class ConfirmationTokenCreate(ConfirmationTokenBase):
+class TokenForEmailCreate(TokenForEmailBase):
     pass
 
 
-class ConfirmationToken(ConfirmationTokenBase):
+class TokenForEmail(TokenForEmailBase):
     id: UUID
     id_used: bool
