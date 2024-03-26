@@ -6,7 +6,11 @@ from sqlalchemy import update
 from models.refresh_tokens import RefreshToken
 from models.email_confirmation_tokens import EmailConfirmationToken
 from models.password_reset_tokens import PasswordResetToken
-from schemas.auth import RefreshTokenCreateSchema, TokenForEmailCreateSchema
+from schemas.auth import (
+    RefreshTokenCreateSchema,
+    EmailConfirmationCreateSchema,
+    PasswordResetCreateSchema,
+)
 
 
 class RefreshTokenCRUD:
@@ -34,14 +38,20 @@ class RefreshTokenCRUD:
 
 
 class TokenForEmailCRUD:
-    def __init__(self, db: AsyncSession, is_for_password_reset: bool):
+    def __init__(
+        self,
+        db: AsyncSession,
+        is_for_password_reset: bool,
+    ):
         if is_for_password_reset:
             self.model = PasswordResetToken
         else:
             self.model = EmailConfirmationToken
         self.db = db
 
-    async def create(self, token: TokenForEmailCreateSchema) -> None:
+    async def create(
+        self, token: EmailConfirmationCreateSchema | PasswordResetCreateSchema
+    ) -> None:
         token_dict = token.model_dump()
         db_token = self.model(**token_dict)
         self.db.add(db_token)

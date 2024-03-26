@@ -12,12 +12,29 @@ class PasswordMixin(BaseModel):
         return check_password(password)
 
 
+class UsernameMixin(BaseModel):
+    @validator("username", check_fields=False)
+    def validate_username(cls, username):
+        max_length = 30
+        if len(username) > max_length:
+            raise ValueError(
+                f"Username must be no more than {max_length} characters long."
+            )
+
+        if not re.match("^[a-zA-Z0-9._]+$", username):
+            raise ValueError(
+                "Username must contain only letters, numbers, dots, and underscores."
+            )
+
+        return username
+
+
 class UserBaseSchema(BaseModel):
     email: EmailStr
     username: str
 
 
-class UserCreateSchema(PasswordMixin, UserBaseSchema):
+class UserCreateSchema(UsernameMixin, PasswordMixin, UserBaseSchema):
     password: str
 
 

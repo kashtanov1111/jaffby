@@ -1,4 +1,5 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Dict, Any, Optional
 from uuid import UUID
 from datetime import datetime
 
@@ -27,5 +28,10 @@ class TokenForEmailBaseSchema(BaseModel):
     expires_at: datetime
 
 
-class TokenForEmailCreateSchema(TokenForEmailBaseSchema):
+class EmailConfirmationCreateSchema(TokenForEmailBaseSchema):
+    is_for_change: bool
+    extra_data: Optional[Dict[str, Any]] = Field(default=None)
+
+
+class PasswordResetCreateSchema(TokenForEmailBaseSchema):
     pass

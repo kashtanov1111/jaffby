@@ -13,13 +13,13 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False)
-    username = Column(String, unique=True, nullable=False)
+    username = Column(String(length=30), unique=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=False)
     is_email_confirmed = Column(Boolean, default=False)
     is_superuser = Column(Boolean, default=False)
-    first_name = Column(String, nullable=True)
-    last_name = Column(String, nullable=True)
+    first_name = Column(String(length=50), nullable=True)
+    last_name = Column(String(length=50), nullable=True)
     created_at = Column(DateTime, default=func.now())
 
     refresh_tokens = relationship(

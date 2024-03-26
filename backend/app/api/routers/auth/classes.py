@@ -2,6 +2,7 @@ import secrets
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from pydantic import EmailStr
+from typing import Any
 
 from fastapi import status, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.settings import settings
 from crud.auth import TokenForEmailCRUD
-from schemas.auth import TokenForEmailCreateSchema
+from schemas.auth import EmailConfirmationCreateSchema, PasswordResetCreateSchema
 from core.security import generate_csrf_token, verify_password
 from core.utils import send_email_async, get_db_session
 
@@ -58,18 +59,25 @@ class JWTToken:
 
 
 class TokenForEmail:
-    def __init__(self, is_for_password_reset: bool):
+    def __init__(
+        self, is_for_password_reset: bool, is_for_email_change: bool | None = None
+    ):
         if is_for_password_reset:
             self.exp_timedelta = timedelta(
                 minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
             )
+            self.create_schema = PasswordResetCreateSchema
         else:
             self.exp_timedelta = timedelta(
                 hours=settings.EMAIL_CONFIRMATION_TOKEN_EXPIRE_HOURS
             )
+            self.create_schema = EmailConfirmationCreateSchema  # type: ignore
         self.is_for_password_reset = is_for_password_reset
+        self.is_for_email_change = is_for_email_change
 
-    async def generate_and_store(self, db: AsyncSession, user_id: str) -> str:
+    async def generate_and_store(
+        self, db: AsyncSession, user_id: str, email: EmailStr | None = None
+    ) -> str:
         token = secrets.token_urlsafe()
         created_at_with_timezone = datetime.now(timezone.utc)
         expires_at = created_at_with_timezone + self.exp_timedelta
@@ -77,12 +85,19 @@ class TokenForEmail:
         expires_at = expires_at.replace(tzinfo=None)
         created_at = created_at_with_timezone.replace(tzinfo=None)
 
-        token_for_email_to_db = TokenForEmailCreateSchema(
-            token=token,
-            user_id=UUID(user_id),
-            created_at=created_at,
-            expires_at=expires_at,
-        )
+        token_dict_for_db = {
+            "token": token,
+            "user_id": UUID(user_id),
+            "created_at": created_at,
+            "expires_at": expires_at,
+        }
+        if not self.is_for_password_reset:
+            token_dict_for_db.update({"is_for_change": self.is_for_email_change})
+            if email:
+                extra_data = {"new_email": email}
+                token_dict_for_db.update({"extra_data": extra_data})
+
+        token_for_email_to_db = self.create_schema(**token_dict_for_db)  # type: ignore
         await TokenForEmailCRUD(db, self.is_for_password_reset).create(
             token_for_email_to_db
         )
@@ -99,14 +114,19 @@ class TokenForEmail:
             subject = "Reset your password"
             body = f"Please click the following link to reset your password: {url_with_token}"
         else:
-            url_with_token += f"/confirm-email?token={token}"
-            subject = "Confirm your email"
-            body = f"Please click the following link to confirm your email address: {url_with_token}"
+            if self.is_for_email_change:
+                url_with_token += f"/confirm-email-change?token={token}"
+                subject = "Confirm your email"
+                body = f"Please click the following link to confirm your email address: {url_with_token}"
+            else:
+                url_with_token += f"/confirm-email?token={token}"
+                subject = "Confirm your email"
+                body = f"Please click the following link to confirm your email address: {url_with_token}"
         await send_email_async(recipient_email=email, subject=subject, body=body)
 
     async def __call__(
         self, token: str, db: AsyncSession = Depends(get_db_session)
-    ) -> tuple[str, str, AsyncSession]:
+    ) -> tuple[str, str, AsyncSession, Any]:
         """Validates token for email"""
         token_from_db = await TokenForEmailCRUD(
             db, self.is_for_password_reset
@@ -123,8 +143,13 @@ class TokenForEmail:
                 else "Wrong password reset token."
             )
             raise HTTPException(status_code=400, detail=detail)
+        if self.is_for_password_reset == True:
+            extra_data = None
+        else:
+            extra_data = token_from_db.extra_data
         return (
             str(token_from_db.id),
             str(token_from_db.user_id),
             db,
+            extra_data,
         )

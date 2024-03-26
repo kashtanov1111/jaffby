@@ -1,17 +1,17 @@
 from typing import Annotated
-from datetime import datetime, timezone
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Body, status
 from fastapi.security import APIKeyCookie, APIKeyHeader
-from jose import JWTError, jwt  # type: ignore
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from core.settings import settings
+from core.security import verify_password
 from core.utils import get_db_session
 from crud.users import UserCRUD
-from crud.auth import RefreshTokenCRUD, TokenForEmailCRUD
+from crud.auth import RefreshTokenCRUD
 from models.users import User
+from models.refresh_tokens import RefreshToken
 from .classes import JWTToken
 
 
@@ -27,14 +27,14 @@ else:
 async def get_current_user(
     token: Annotated[str, Depends(jwt_access_cookie_auth)],
     db: AsyncSession = Depends(get_db_session),
-) -> User:
+) -> tuple[User, AsyncSession]:
     id = await JWTToken(is_refresh=False).validate(token)
     user = await UserCRUD(db).get_by_id(id)
     if user is None:
         raise JWTToken.credentials_exception
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
-    return user
+    return user, db
 
 
 async def csrftoken_check(
@@ -45,14 +45,25 @@ async def csrftoken_check(
         raise JWTToken.credentials_exception
 
 
-async def validate_refresh_token_and_set_revoked_true(
+async def validate_refresh_token_from_cookie(
     refresh_token: Annotated[str, Depends(jwt_refresh_cookie_auth)],
     db: AsyncSession = Depends(get_db_session),
-) -> tuple[str, AsyncSession]:
+) -> tuple[RefreshToken, AsyncSession]:
     id = await JWTToken(is_refresh=True).validate(refresh_token)
-    refresh_token_crud = RefreshTokenCRUD(db)
-    refresh_token_from_db = await refresh_token_crud.get_by_id(id)
+    refresh_token_from_db = await RefreshTokenCRUD(db).get_by_id(id)
     if refresh_token_from_db is None or refresh_token_from_db.revoked == True:
         raise JWTToken.credentials_exception
-    await refresh_token_crud.set_revoke_status_to_true(id)
-    return str(refresh_token_from_db.user_id), db
+    return refresh_token_from_db, db
+
+
+async def verify_password_for_important_changes(
+    password: Annotated[str, Body(embed=True)],
+    data: Annotated[tuple[User, AsyncSession], Depends(get_current_user)],
+) -> tuple[User, AsyncSession]:
+    current_user, db = data
+    if not await verify_password(password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password",
+        )
+    return current_user, db

@@ -1,6 +1,7 @@
 import re
 import asyncio
 import secrets
+from pydantic import EmailStr
 
 from passlib.context import CryptContext  # type: ignore
 

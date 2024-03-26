@@ -1,20 +1,15 @@
-import secrets
 import uuid
 from uuid import UUID
-from datetime import datetime, timedelta, timezone
-from pydantic import EmailStr
 
 from fastapi import Response, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from jose import jwt  # type: ignore
 
 from core.settings import settings
 from crud.users import UserCRUD
-from crud.auth import RefreshTokenCRUD, TokenForEmailCRUD
-from schemas.auth import RefreshTokenCreateSchema, TokenForEmailCreateSchema
+from crud.auth import RefreshTokenCRUD
+from schemas.auth import RefreshTokenCreateSchema
 from models.users import User
 from core.security import generate_csrf_token, verify_password
-from core.utils import send_email_async
 from .classes import JWTToken
 
 
@@ -55,19 +50,22 @@ async def set_auth_cookies_in_response(
     )
 
 
-async def authenticate_user(db: AsyncSession, username: str, password: str) -> User:
+async def authenticate_user(db: AsyncSession, login_str: str, password: str) -> User:
     incorrect_username_or_password_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Incorrect username or password",
+        detail="Incorrect credentials",
         headers={"WWW-Authenticate": "Cookie"},
     )
-    user = await UserCRUD(db).get_by_username(username)
+    user_crud = UserCRUD(db)
+    user = await user_crud.get_by_login_str(login_str)
     if not user:
         raise incorrect_username_or_password_exception
     if not await verify_password(password, user.hashed_password):
         raise incorrect_username_or_password_exception
     if user.is_email_confirmed == False:
         raise HTTPException(status_code=403, detail="Email address is not confirmed.")
+    if user.is_active == False:
+        await user_crud.set_is_active_true(str(user.id))
     return user
 
 

@@ -3,6 +3,7 @@ from pydantic import EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update
+from sqlalchemy.sql.expression import or_
 
 from models.users import User
 from schemas.users import UserCreateSchema
@@ -33,6 +34,15 @@ class UserCRUD:
         user = result.scalars().first()
         return user
 
+    async def get_by_login_str(self, login_str: str) -> User | None:
+        result = await self.db.execute(
+            select(self.model).where(
+                or_(self.model.username == login_str, self.model.email == login_str)
+            )
+        )
+        user = result.scalars().first()
+        return user
+
     async def create(self, user: UserCreateSchema) -> User:
         hashed_password = await get_password_hash(user.password)
         db_user = self.model(
@@ -51,11 +61,29 @@ class UserCRUD:
         )
         await self.db.commit()
 
+    async def set_is_active_false(self, id: str) -> None:
+        await self.db.execute(
+            update(self.model).where(self.model.id == id).values(is_active=False)
+        )
+        await self.db.commit()
+
+    async def set_is_active_true(self, id: str) -> None:
+        await self.db.execute(
+            update(self.model).where(self.model.id == id).values(is_active=True)
+        )
+        await self.db.commit()
+
     async def update_password(self, new_password: str, id: str):
         hashed_password = await get_password_hash(new_password)
         await self.db.execute(
             update(self.model)
             .where(self.model.id == id)
             .values(hashed_password=hashed_password)
+        )
+        await self.db.commit()
+
+    async def update_email(self, new_email: EmailStr, id: str):
+        await self.db.execute(
+            update(self.model).where(self.model.id == id).values(email=new_email)
         )
         await self.db.commit()

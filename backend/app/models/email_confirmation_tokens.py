@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, ForeignKey, String, DateTime, Boolean
+from sqlalchemy import Column, ForeignKey, String, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -21,6 +21,8 @@ class EmailConfirmationToken(Base):
     )
     created_at = Column(DateTime, default=func.now())
     expires_at = Column(DateTime, nullable=False)
+    is_for_change = Column(Boolean, nullable=False)
+    extra_data = Column(JSON, nullable=True)
     is_used = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="email_confirmation_tokens")
