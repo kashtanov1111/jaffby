@@ -13,7 +13,7 @@ async def get_db_session():
 
 async def send_email_async(recipient_email: EmailStr, subject: str, body: str) -> None:
     message = EmailMessage()
-    message["From"] = settings.SMTP_HOST_USER
+    message["From"] = str(settings.SMTP_HOST_USER)
     message["To"] = recipient_email
     message["Subject"] = subject
     message.set_content(body)

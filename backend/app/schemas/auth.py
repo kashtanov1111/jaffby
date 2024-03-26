@@ -20,17 +20,12 @@ class RefreshTokenSchema(RefreshTokenBaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
 
-class TokenForEmailBase(BaseModel):
+class TokenForEmailBaseSchema(BaseModel):
     token: str
     user_id: UUID
     created_at: datetime
     expires_at: datetime
 
 
-class TokenForEmailCreate(TokenForEmailBase):
+class TokenForEmailCreateSchema(TokenForEmailBaseSchema):
     pass
-
-
-class TokenForEmail(TokenForEmailBase):
-    id: UUID
-    id_used: bool

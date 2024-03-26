@@ -6,33 +6,21 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.utils import get_db_session
-from core.security import check_password
-from crud.users import (
-    get_user_by_username,
-    get_user_by_email,
-    create_user,
-    set_is_email_confirmed_and_is_active_true_on_user,
-    update_user_password,
-)
-from crud.auth import (
-    set_is_used_true_on_token_from_email,
-    set_is_used_true_on_all_email_confirmation_tokens_by_user_id,
-)
+from crud.users import UserCRUD
+from crud.auth import TokenForEmailCRUD
 from schemas.users import UserSchema, UserCreateSchema, UserPasswordResetSchema
 from .utils import (
     authenticate_user,
     create_tokens_and_set_auth_cookies_in_response,
     clear_auth_cookies_in_response,
-    generate_and_store_token_for_email,
-    send_email_with_token,
 )
 from .dependencies import (
-    get_current_active_user,
+    get_current_user,
     validate_refresh_token_and_set_revoked_true,
     csrftoken_check,
-    TokenFromEmailValidator,
 )
 from models.users import User
+from .classes import TokenForEmail
 
 router = APIRouter()
 
@@ -44,14 +32,12 @@ async def login_route(
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
     user = await authenticate_user(db, form_data.username, form_data.password)
-    if user.is_email_confirmed == False:
-        raise HTTPException(status_code=403, detail="Email address is not confirmed.")
     await create_tokens_and_set_auth_cookies_in_response(db, str(user.id), response)
     return {"message": "Logged in successfully"}
 
 
 @router.get("/me", response_model=UserSchema)
-async def me_route(current_user: Annotated[User, Depends(get_current_active_user)]):
+async def me_route(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
 
 
@@ -61,18 +47,18 @@ async def register_route(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db_session),
 ) -> dict:
-    db_user_by_email = await get_user_by_email(db, email=user.email)
+    user_crud = UserCRUD(db)
+    db_user_by_email = await user_crud.get_by_email(user.email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email already registered")
-    db_user_by_username = await get_user_by_username(db, username=user.username)
+    db_user_by_username = await user_crud.get_by_username(user.username)
     if db_user_by_username:
         raise HTTPException(status_code=400, detail="Username already registered")
-    created_user = await create_user(db=db, user=user)
-    token = await generate_and_store_token_for_email(
-        db, str(created_user.id), is_for_password_reset=False
-    )
+    created_user = await user_crud.create(user)
+    token_for_email = TokenForEmail(is_for_password_reset=False)
+    token = await token_for_email.generate_and_store(db, str(created_user.id))
     background_tasks.add_task(
-        send_email_with_token, str(created_user.email), token, False
+        token_for_email.send_email, str(created_user.email), token
     )
     return {"message": "Confirmation email sent."}
 
@@ -80,9 +66,11 @@ async def register_route(
 @router.post("/refresh", dependencies=[Depends(csrftoken_check)])
 async def refresh_token_route(
     response: Response,
-    user_id: Annotated[str, Depends(validate_refresh_token_and_set_revoked_true)],
-    db: AsyncSession = Depends(get_db_session),
+    data: Annotated[
+        tuple[str, AsyncSession], Depends(validate_refresh_token_and_set_revoked_true)
+    ],
 ):
+    user_id, db = data
     await create_tokens_and_set_auth_cookies_in_response(db, user_id, response)
     return {"message": "Successfully refreshed tokens."}
 
@@ -91,7 +79,7 @@ async def refresh_token_route(
     "/logout",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(get_current_active_user),
+        Depends(get_current_user),
         Depends(validate_refresh_token_and_set_revoked_true),
     ],
 )
@@ -104,14 +92,12 @@ async def logout_route(response: Response):
 async def confirm_email_route(
     data: Annotated[
         tuple[str, str, AsyncSession],
-        Depends(TokenFromEmailValidator(is_for_reset_password=False)),
+        Depends(TokenForEmail(is_for_password_reset=False)),
     ]
 ):
     token_id, user_id, db = data
-    await set_is_used_true_on_token_from_email(
-        db, token_id, is_for_password_reset=False
-    )
-    await set_is_email_confirmed_and_is_active_true_on_user(db, user_id)
+    await TokenForEmailCRUD(db, is_for_password_reset=False).set_is_used_true(token_id)
+    await UserCRUD(db).set_is_email_confirmed_and_is_active_true(user_id)
     return {"message": "Email was confirmed successfully."}
 
 
@@ -121,15 +107,14 @@ async def resend_confirmation_email_route(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db_session),
 ):
-    user = await get_user_by_email(db, email)
+    user = await UserCRUD(db).get_by_email(email)
     if user and not user.is_email_confirmed:
-        await set_is_used_true_on_all_email_confirmation_tokens_by_user_id(
-            db, str(user.id)
-        )
-        token = await generate_and_store_token_for_email(
-            db, str(user.id), is_for_password_reset=False
-        )
-        background_tasks.add_task(send_email_with_token, str(user.email), token, False)
+        await TokenForEmailCRUD(
+            db, is_for_password_reset=False
+        ).set_is_used_true_on_all_tokens(str(user.id))
+        token_for_email = TokenForEmail(is_for_password_reset=False)
+        token = await token_for_email.generate_and_store(db, str(user.id))
+        background_tasks.add_task(token_for_email.send_email, str(user.email), token)
 
     return {
         "message": "If an account with that email exists, a confirmation email has been sent."
@@ -142,12 +127,11 @@ async def request_password_reset(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db_session),
 ):
-    user = await get_user_by_email(db, email)
+    user = await UserCRUD(db).get_by_email(email)
     if user and user.is_email_confirmed:
-        token = await generate_and_store_token_for_email(
-            db, str(user.id), is_for_password_reset=True
-        )
-        background_tasks.add_task(send_email_with_token, str(user.email), token, True)
+        token_for_email = TokenForEmail(is_for_password_reset=True)
+        token = await token_for_email.generate_and_store(db, str(user.id))
+        background_tasks.add_task(token_for_email.send_email, str(user.email), token)
 
     return {
         "message": "If an email address is associated with an account, a password reset link has been sent."
@@ -158,12 +142,12 @@ async def request_password_reset(
 async def reset_password_route(
     data: Annotated[
         tuple[str, str, AsyncSession],
-        Depends(TokenFromEmailValidator(is_for_reset_password=True)),
+        Depends(TokenForEmail(is_for_password_reset=True)),
     ],
     request_data: UserPasswordResetSchema,
 ):
     new_password = request_data.password
     token_id, user_id, db = data
-    await set_is_used_true_on_token_from_email(db, token_id, is_for_password_reset=True)
-    await update_user_password(db, new_password, user_id)
+    await TokenForEmailCRUD(db, is_for_password_reset=True).set_is_used_true(token_id)
+    await UserCRUD(db).update_password(new_password, user_id)
     return {"message": "Password was successfully reset."}

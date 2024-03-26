@@ -13,4 +13,4 @@ langserve[server]==0.0.51
 langchain==0.1.12
 langchain-openai==0.0.8
 aiosmtplib==3.0.1
-
+mypy==1.9.0

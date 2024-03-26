@@ -40,4 +40,8 @@ from core.utils import send_email_async
 #     "RYj39MNFzvJD6dGx",
 # )
 
-asyncio.run(send_email_async("1kashtanov1111@gmail.com", "llll", "9999"))
+# asyncio.run(send_email_async("1kashtanov1111@gmail.com", "llll", "9999"))
+from api.routers.auth.classes import JWTToken
+
+
+print(JWTToken.credentials_exception)

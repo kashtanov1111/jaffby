@@ -5,16 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Callable, Annotated
 
 from fastapi import Depends, HTTPException
-from core.database import SessionLocal
-from crud.users import (
-    get_user_by_id,
-    get_user_by_email,
-    get_user_by_username,
-    create_user,
-)
 from schemas.users import UserSchema, UserCreateSchema
 from .auth.dependencies import (
-    get_current_active_user,
+    get_current_user,
     csrftoken_check,
 )
 
@@ -24,7 +17,7 @@ router = APIRouter()
 @router.put(
     "/update_user_profile",
     dependencies=[
-        Depends(get_current_active_user),
+        Depends(get_current_user),
         Depends(csrftoken_check),
     ],
 )
