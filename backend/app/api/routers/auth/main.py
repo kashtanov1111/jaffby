@@ -12,7 +12,8 @@ from fastapi import (
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.utils import get_db_session
+
+from core.utils import get_db_session, CustomRateLimiter
 from crud.users import UserCRUD
 from crud.auth import TokenForEmailCRUD, RefreshTokenCRUD
 from schemas.users import (
@@ -39,7 +40,7 @@ from .classes import TokenForEmail
 router = APIRouter()
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))])
 async def login_route(
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -51,14 +52,18 @@ async def login_route(
     return {"message": "Logged in successfully"}
 
 
-@router.get("/me", response_model=UserSchema)
+@router.get(
+    "/me",
+    dependencies=[Depends(CustomRateLimiter(times=20, hours=1))],
+    response_model=UserSchema,
+)
 async def me_route(
     data: Annotated[tuple[User, AsyncSession], Depends(get_current_user)]
 ):
     return data[0]
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))])
 async def register_route(
     user: UserCreateSchema,
     background_tasks: BackgroundTasks,
@@ -82,7 +87,13 @@ async def register_route(
     return {"message": "Confirmation email sent."}
 
 
-@router.post("/refresh", dependencies=[Depends(csrftoken_check)])
+@router.post(
+    "/refresh",
+    dependencies=[
+        Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=20, hours=1)),
+    ],
+)
 async def refresh_token_route(
     response: Response,
     data: Annotated[
@@ -102,6 +113,7 @@ async def refresh_token_route(
     dependencies=[
         Depends(csrftoken_check),
         Depends(get_current_user),
+        Depends(CustomRateLimiter(times=10, hours=1)),
     ],
 )
 async def logout_route(
@@ -116,7 +128,9 @@ async def logout_route(
     return {"message": "Successfully logged out"}
 
 
-@router.post("/confirm-email")
+@router.post(
+    "/confirm-email", dependencies=[Depends(CustomRateLimiter(times=5, hours=1))]
+)
 async def confirm_email_route(
     data: Annotated[
         tuple[str, str, AsyncSession, Any],
@@ -129,7 +143,10 @@ async def confirm_email_route(
     return {"message": "Email was confirmed successfully."}
 
 
-@router.post("/resend-email-confirmation")
+@router.post(
+    "/resend-email-confirmation",
+    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+)
 async def resend_confirmation_email_route(
     email: Annotated[EmailStr, Body(embed=True)],
     background_tasks: BackgroundTasks,
@@ -151,7 +168,10 @@ async def resend_confirmation_email_route(
     }
 
 
-@router.post("/request-password-reset")
+@router.post(
+    "/request-password-reset",
+    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+)
 async def request_password_reset(
     email: Annotated[EmailStr, Body(embed=True)],
     background_tasks: BackgroundTasks,
@@ -168,7 +188,9 @@ async def request_password_reset(
     }
 
 
-@router.post("/reset-password")
+@router.post(
+    "/reset-password", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))]
+)
 async def reset_password_route(
     data: Annotated[
         tuple[str, str, AsyncSession, Any],
@@ -187,6 +209,7 @@ async def reset_password_route(
     "/archive-account",
     dependencies=[
         Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=5, hours=1)),
     ],
 )
 async def archive_account_route(
@@ -210,6 +233,7 @@ async def archive_account_route(
     "/request-email-change",
     dependencies=[
         Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=10, hours=1)),
     ],
 )
 async def request_change_email_route(
@@ -235,7 +259,10 @@ async def request_change_email_route(
     }
 
 
-@router.post("/confirm-email-change")
+@router.post(
+    "/confirm-email-change",
+    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+)
 async def confirm_email_change_route(
     data: Annotated[
         tuple[str, str, AsyncSession, Any],
@@ -252,6 +279,7 @@ async def confirm_email_change_route(
     "/change-password",
     dependencies=[
         Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=5, hours=1)),
     ],
 )
 async def change_password_route(
@@ -277,6 +305,7 @@ async def change_password_route(
     "/change-username",
     dependencies=[
         Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=5, hours=1)),
     ],
 )
 async def change_username_route(

@@ -1,8 +1,8 @@
-from fastapi import APIRouter
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Annotated
 
-from fastapi import Depends, Body, HTTPException
+from fastapi import APIRouter, Depends, Body, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from models.users import User
 from schemas.users import UserUpdateSchema, UserSchema
 from crud.users import UserCRUD
@@ -10,8 +10,7 @@ from .auth.dependencies import (
     get_current_user,
     csrftoken_check,
 )
-from core.utils import get_db_session
-
+from core.utils import get_db_session, CustomRateLimiter
 
 router = APIRouter()
 
@@ -20,6 +19,7 @@ router = APIRouter()
     "/update",
     dependencies=[
         Depends(csrftoken_check),
+        Depends(CustomRateLimiter(times=5, hours=1)),
     ],
     response_model=UserSchema,
 )
@@ -34,7 +34,11 @@ async def update_user_profile_route(
     return updated_user
 
 
-@router.get("/{user_id}", response_model=UserSchema)
+@router.get(
+    "/{user_id}",
+    dependencies=[Depends(CustomRateLimiter(times=30, hours=1))],
+    response_model=UserSchema,
+)
 async def get_user_by_id_route(
     user_id: str, db: AsyncSession = Depends(get_db_session)
 ):
