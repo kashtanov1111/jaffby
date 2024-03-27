@@ -87,3 +87,9 @@ class UserCRUD:
             update(self.model).where(self.model.id == id).values(email=new_email)
         )
         await self.db.commit()
+
+    async def update_username(self, new_username: str, id: str):
+        await self.db.execute(
+            update(self.model).where(self.model.id == id).values(username=new_username)
+        )
+        await self.db.commit()

@@ -8,16 +8,19 @@ from fastapi import (
     Response,
     BackgroundTasks,
     Body,
-    status,
 )
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.utils import get_db_session
-from core.security import verify_password
 from crud.users import UserCRUD
 from crud.auth import TokenForEmailCRUD, RefreshTokenCRUD
-from schemas.users import UserSchema, UserCreateSchema, UserPasswordResetSchema
+from schemas.users import (
+    UserSchema,
+    UserCreateSchema,
+    UserNewPasswordSchema,
+    UserNewUsernameSchema,
+)
 from .utils import (
     authenticate_user,
     create_tokens_and_set_auth_cookies_in_response,
@@ -171,7 +174,7 @@ async def reset_password_route(
         tuple[str, str, AsyncSession, Any],
         Depends(TokenForEmail(is_for_password_reset=True)),
     ],
-    request_data: UserPasswordResetSchema,
+    request_data: UserNewPasswordSchema,
 ):
     new_password = request_data.password
     token_id, user_id, db, _ = data
@@ -209,7 +212,7 @@ async def archive_account_route(
         Depends(csrftoken_check),
     ],
 )
-async def change_email_route(
+async def request_change_email_route(
     new_email: Annotated[EmailStr, Body(embed=True)],
     data: Annotated[
         tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
@@ -217,6 +220,9 @@ async def change_email_route(
     background_tasks: BackgroundTasks,
 ):
     current_user, db = data
+    db_user_by_email = await UserCRUD(db).get_by_email(new_email)
+    if db_user_by_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
     token_for_email = TokenForEmail(
         is_for_password_reset=False, is_for_email_change=True
     )
@@ -240,3 +246,57 @@ async def confirm_email_change_route(
     await TokenForEmailCRUD(db, is_for_password_reset=False).set_is_used_true(token_id)
     await UserCRUD(db).update_email(extra_data["new_email"], user_id)
     return {"message": "Email was confirmed successfully."}
+
+
+@router.post(
+    "/change-password",
+    dependencies=[
+        Depends(csrftoken_check),
+    ],
+)
+async def change_password_route(
+    request_data: UserNewPasswordSchema,
+    response: Response,
+    data1: Annotated[
+        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
+    ],
+    data2: Annotated[
+        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
+    ],
+):
+    new_password = request_data.password
+    current_user, db = data1
+    refresh_token_from_db, _ = data2
+    await UserCRUD(db).update_password(new_password, str(current_user.id))
+    await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
+    await clear_auth_cookies_in_response(response)
+    return {"message": "Password was successfully changed."}
+
+
+@router.post(
+    "/change-username",
+    dependencies=[
+        Depends(csrftoken_check),
+    ],
+)
+async def change_username_route(
+    request_data: UserNewUsernameSchema,
+    response: Response,
+    data1: Annotated[
+        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
+    ],
+    data2: Annotated[
+        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
+    ],
+):
+    new_username = request_data.username
+    current_user, db = data1
+    refresh_token_from_db, _ = data2
+    user_crud = UserCRUD(db)
+    db_user_by_username = await user_crud.get_by_username(new_username)
+    if db_user_by_username:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    await UserCRUD(db).update_username(new_username, str(current_user.id))
+    await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
+    await clear_auth_cookies_in_response(response)
+    return {"message": "Username was successfully changed."}

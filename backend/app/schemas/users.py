@@ -1,5 +1,5 @@
 import re
-from pydantic import BaseModel, ConfigDict, EmailStr, validator
+from pydantic import BaseModel, ConfigDict, EmailStr, validator, Field
 from uuid import UUID
 from datetime import datetime
 
@@ -48,5 +48,9 @@ class UserSchema(UserBaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserPasswordResetSchema(PasswordMixin, BaseModel):
-    password: str
+class UserNewPasswordSchema(PasswordMixin, BaseModel):
+    password: str = Field(..., alias="new_password")
+
+
+class UserNewUsernameSchema(UsernameMixin, BaseModel):
+    username: str = Field(..., alias="new_username")
