@@ -44,4 +44,8 @@ from core.utils import send_email_async
 from api.routers.auth.classes import JWTToken
 
 
-print(JWTToken.credentials_exception)
+# print(JWTToken.credentials_exception)
+
+value = " "
+print(repr(value.strip()))
+print(repr(value), repr(value) == True)

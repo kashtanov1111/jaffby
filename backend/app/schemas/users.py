@@ -29,6 +29,29 @@ class UsernameMixin(BaseModel):
         return username
 
 
+class NameMixin(BaseModel):
+
+    @validator("first_name", check_fields=False)
+    def validate_first_name(cls, value):
+        value = value.strip() if value is not None else value
+        if value is not None:
+            if not value:
+                raise ValueError("First name cannot be empty or just whitespace.")
+            if len(value) > 50:
+                raise ValueError("First name must not exceed 50 characters.")
+        return value
+
+    @validator("last_name", check_fields=False)
+    def validate_last_name(cls, value):
+        value = value.strip() if value is not None else value
+        if value is not None:
+            if not value:
+                raise ValueError("Last name cannot be empty or just whitespace.")
+            if len(value) > 50:
+                raise ValueError("Last name must not exceed 50 characters.")
+        return value
+
+
 class UserBaseSchema(BaseModel):
     email: EmailStr
     username: str
@@ -36,6 +59,11 @@ class UserBaseSchema(BaseModel):
 
 class UserCreateSchema(UsernameMixin, PasswordMixin, UserBaseSchema):
     password: str
+
+
+class UserUpdateSchema(NameMixin, BaseModel):
+    first_name: str | None
+    last_name: str | None
 
 
 class UserSchema(UserBaseSchema):
