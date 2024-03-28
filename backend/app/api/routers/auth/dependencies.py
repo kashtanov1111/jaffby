@@ -26,7 +26,7 @@ else:
 
 async def get_current_user(
     token: Annotated[str, Depends(jwt_access_cookie_auth)],
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> tuple[User, AsyncSession]:
     id = await JWTToken(is_refresh=False).validate(token)
     user = await UserCRUD(db).get_by_id(id)
@@ -47,7 +47,7 @@ async def csrftoken_check(
 
 async def validate_refresh_token_from_cookie(
     refresh_token: Annotated[str, Depends(jwt_refresh_cookie_auth)],
-    db: AsyncSession = Depends(get_db_session),
+    db: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> tuple[RefreshToken, AsyncSession]:
     id = await JWTToken(is_refresh=True).validate(refresh_token)
     refresh_token_from_db = await RefreshTokenCRUD(db).get_by_id(id)
@@ -60,6 +60,11 @@ async def verify_password_for_important_changes(
     password: Annotated[str, Body(embed=True)],
     data: Annotated[tuple[User, AsyncSession], Depends(get_current_user)],
 ) -> tuple[User, AsyncSession]:
+    if len(password) > settings.MAX_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect password",
+        )
     current_user, db = data
     if not await verify_password(password, current_user.hashed_password):
         raise HTTPException(

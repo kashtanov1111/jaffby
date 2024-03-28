@@ -44,10 +44,10 @@ class UserCRUD:
         return user
 
     async def create(self, user: UserCreateSchema) -> User:
-        hashed_password = await get_password_hash(user.password)
-        db_user = self.model(
-            email=user.email, username=user.username, hashed_password=hashed_password
-        )
+        user_dict = user.model_dump()
+        user_dict["hashed_password"] = await get_password_hash(user_dict["password"])
+        del user_dict["password"]
+        db_user = self.model(**user_dict)
         self.db.add(db_user)
         await self.db.commit()
         await self.db.refresh(db_user)

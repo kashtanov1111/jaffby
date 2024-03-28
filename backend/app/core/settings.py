@@ -6,9 +6,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 900
     API_VERSION_STR: str = "/api/v1"
     APP_NAME: str = "Jaffby App Server"
+    CORS_ORIGINS: list = ["http://localhost/"]
     DEBUG: bool = True  # bool(os.getenv("DEBUG", False))
     DOMAIN_NAME: str = "jaffby.com"
     EMAIL_CONFIRMATION_TOKEN_EXPIRE_HOURS: int = 24
+    MAX_PASSWORD_LENGTH: int = 72
+    MAX_USERNAME_LENGTH: int = 30
     JWT_ENCODING_ALGORITHM: str = "HS256"
     PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 15
     POSTGRES_DB: str | None = os.getenv("POSTGRES_DB")

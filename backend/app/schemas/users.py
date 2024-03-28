@@ -4,6 +4,7 @@ from uuid import UUID
 from datetime import datetime
 
 from core.security import check_password
+from core.settings import settings
 
 
 class PasswordMixin(BaseModel):
@@ -15,7 +16,7 @@ class PasswordMixin(BaseModel):
 class UsernameMixin(BaseModel):
     @validator("username", check_fields=False)
     def validate_username(cls, username):
-        max_length = 30
+        max_length = settings.MAX_USERNAME_LENGTH
         if len(username) > max_length:
             raise ValueError(
                 f"Username must be no more than {max_length} characters long."
@@ -34,21 +35,15 @@ class NameMixin(BaseModel):
     @validator("first_name", check_fields=False)
     def validate_first_name(cls, value):
         value = value.strip() if value is not None else value
-        if value is not None:
-            if not value:
-                raise ValueError("First name cannot be empty or just whitespace.")
-            if len(value) > 50:
-                raise ValueError("First name must not exceed 50 characters.")
+        if value is not None and not value:
+            raise ValueError("First name cannot be empty or just whitespace.")
         return value
 
     @validator("last_name", check_fields=False)
     def validate_last_name(cls, value):
         value = value.strip() if value is not None else value
-        if value is not None:
-            if not value:
-                raise ValueError("Last name cannot be empty or just whitespace.")
-            if len(value) > 50:
-                raise ValueError("Last name must not exceed 50 characters.")
+        if value is not None and not value:
+            raise ValueError("Last name cannot be empty or just whitespace.")
         return value
 
 
@@ -62,8 +57,8 @@ class UserCreateSchema(UsernameMixin, PasswordMixin, UserBaseSchema):
 
 
 class UserUpdateSchema(NameMixin, BaseModel):
-    first_name: str | None
-    last_name: str | None
+    first_name: str | None = Field(..., max_length=50)
+    last_name: str | None = Field(..., max_length=50)
 
 
 class UserSchema(UserBaseSchema):

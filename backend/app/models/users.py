@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import DateTime, func
 
+from core.settings import settings
 from core.database import Base  # type: ignore
 
 
@@ -12,9 +13,11 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String, unique=True, nullable=False)
-    username = Column(String(length=30), unique=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    email = Column(String(length=254), unique=True, nullable=False)
+    username = Column(
+        String(length=settings.MAX_USERNAME_LENGTH), unique=True, nullable=False
+    )
+    hashed_password = Column(String(length=60), nullable=False)
     is_active = Column(Boolean, default=False)
     is_email_confirmed = Column(Boolean, default=False)
     is_superuser = Column(Boolean, default=False)

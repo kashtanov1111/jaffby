@@ -26,9 +26,9 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.UUID(), nullable=False, default=uuid.uuid4),
-        sa.Column("email", sa.String(), nullable=False),
+        sa.Column("email", sa.String(length=254), nullable=False),
         sa.Column("username", sa.String(length=30), nullable=False),
-        sa.Column("hashed_password", sa.String(), nullable=False),
+        sa.Column("hashed_password", sa.String(length=60), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=True, default=False),
         sa.Column("is_email_confirmed", sa.Boolean(), nullable=True, default=False),
         sa.Column("is_superuser", sa.Boolean(), nullable=True, default=False),

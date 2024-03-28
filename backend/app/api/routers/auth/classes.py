@@ -2,7 +2,7 @@ import secrets
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
 from pydantic import EmailStr
-from typing import Any
+from typing import Any, Annotated
 
 from fastapi import status, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -125,9 +125,17 @@ class TokenForEmail:
         await send_email_async(recipient_email=email, subject=subject, body=body)
 
     async def __call__(
-        self, token: str, db: AsyncSession = Depends(get_db_session)
+        self, token: str, db: Annotated[AsyncSession, Depends(get_db_session)]
     ) -> tuple[str, str, AsyncSession, Any]:
         """Validates token for email"""
+        detail = (
+            "Wrong email confirmation token."
+            if not self.is_for_password_reset
+            else "Wrong password reset token."
+        )
+        token_validation_exception = HTTPException(status_code=400, detail=detail)
+        if len(token) > 100:
+            raise token_validation_exception
         token_from_db = await TokenForEmailCRUD(
             db, self.is_for_password_reset
         ).get_by_token(token)
@@ -137,12 +145,7 @@ class TokenForEmail:
             or token_from_db.is_used == True
             or token_from_db.expires_at <= current_time
         ):
-            detail = (
-                "Wrong email confirmation token."
-                if not self.is_for_password_reset
-                else "Wrong password reset token."
-            )
-            raise HTTPException(status_code=400, detail=detail)
+            raise token_validation_exception
         if self.is_for_password_reset == True:
             extra_data = None
         else:

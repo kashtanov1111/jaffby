@@ -5,6 +5,8 @@ from pydantic import EmailStr
 
 from passlib.context import CryptContext  # type: ignore
 
+from core.settings import settings
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -22,8 +24,11 @@ async def generate_csrf_token() -> str:
 
 def check_password(password: str) -> str:
     min_length = 8
+    max_length = settings.MAX_PASSWORD_LENGTH
     if len(password) < min_length:
         raise ValueError(f"Password must be at least {min_length} characters long.")
+    if len(password) > max_length:
+        raise ValueError(f"Password must be no more than {max_length} characters long.")
     if not re.search("[a-z]", password):
         raise ValueError("Password must include lowercase letters.")
     if not re.search("[A-Z]", password):

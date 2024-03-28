@@ -51,17 +51,19 @@ async def set_auth_cookies_in_response(
 
 
 async def authenticate_user(db: AsyncSession, login_str: str, password: str) -> User:
-    incorrect_username_or_password_exception = HTTPException(
+    incorrect_login_str_or_password_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Incorrect credentials",
         headers={"WWW-Authenticate": "Cookie"},
     )
+    if len(login_str) > 254 or len(password) > settings.MAX_PASSWORD_LENGTH:
+        raise incorrect_login_str_or_password_exception
     user_crud = UserCRUD(db)
     user = await user_crud.get_by_login_str(login_str)
     if not user:
-        raise incorrect_username_or_password_exception
+        raise incorrect_login_str_or_password_exception
     if not await verify_password(password, user.hashed_password):
-        raise incorrect_username_or_password_exception
+        raise incorrect_login_str_or_password_exception
     if user.is_email_confirmed == False:
         raise HTTPException(status_code=403, detail="Email address is not confirmed.")
     if user.is_active == False:

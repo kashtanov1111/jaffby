@@ -1,8 +1,9 @@
 import redis.asyncio as redis  # type: ignore
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
 from fastapi_limiter import FastAPILimiter  # type: ignore
+from fastapi.middleware.cors import CORSMiddleware
 
 from core.settings import settings
 from core.utils import CustomRateLimiter
@@ -24,6 +25,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(api_router, prefix=settings.API_VERSION_STR)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/index", dependencies=[Depends(CustomRateLimiter(times=2, seconds=5))])
