@@ -1,5 +1,4 @@
-from typing import Annotated, Any
-from pydantic import EmailStr
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -7,13 +6,10 @@ from fastapi import (
     HTTPException,
     Response,
     BackgroundTasks,
-    Body,
 )
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
 
 
-from core.utils import get_db_session, CustomRateLimiter
 from crud.users import UserCRUD
 from crud.auth import TokenForEmailCRUD, RefreshTokenCRUD
 from schemas.users import (
@@ -30,21 +26,25 @@ from .utils import (
 from .dependencies import (
     get_current_user,
     csrftoken_check,
-    validate_refresh_token_from_cookie,
-    verify_password_for_important_changes,
+    GetDbSessionDep,
+    GetCurrentUserDep,
+    CustomRateLimiterDepends5,
+    CustomRateLimiterDepends10,
+    CustomRateLimiterDepends20,
+    ValidateRefreshTokenFromCookieDep,
+    VerifyPasswordForImportantChangesDep,
+    EmailStrEmbeddedDep,
 )
-from models.users import User
-from models.refresh_tokens import RefreshToken
-from .classes import TokenForEmail
+from .classes import TokenForEmail, TokenForEmailDep, TokenForEmailPassResetDep
 
 router = APIRouter()
 
 
-@router.post("/login", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))])
+@router.post("/login", dependencies=[CustomRateLimiterDepends10])
 async def login_route(
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-    db: Annotated[AsyncSession, Depends(get_db_session)],
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     login_str = form_data.username  # could be email also
     user = await authenticate_user(db, login_str, form_data.password)
@@ -54,19 +54,17 @@ async def login_route(
 
 @router.get(
     "/me",
-    dependencies=[Depends(CustomRateLimiter(times=20, hours=1))],
+    dependencies=[CustomRateLimiterDepends20],
 )
-async def me_route(
-    data: Annotated[tuple[User, AsyncSession], Depends(get_current_user)]
-) -> UserSchema:
-    return data[0]
+async def me_route(current_user: GetCurrentUserDep) -> UserSchema:
+    return current_user
 
 
-@router.post("/register", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))])
+@router.post("/register", dependencies=[CustomRateLimiterDepends10])
 async def register_route(
     user: UserCreateSchema,
     background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db_session),
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     user_crud = UserCRUD(db)
     db_user_by_email = await user_crud.get_by_email(user.email)
@@ -90,16 +88,14 @@ async def register_route(
     "/refresh",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(CustomRateLimiter(times=20, hours=1)),
+        CustomRateLimiterDepends20,
     ],
 )
 async def refresh_token_route(
     response: Response,
-    data: Annotated[
-        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
-    ],
+    refresh_token_from_db: ValidateRefreshTokenFromCookieDep,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
-    refresh_token_from_db, db = data
     await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
     await create_tokens_and_set_auth_cookies_in_response(
         db, str(refresh_token_from_db.user_id), response
@@ -112,31 +108,24 @@ async def refresh_token_route(
     dependencies=[
         Depends(csrftoken_check),
         Depends(get_current_user),
-        Depends(CustomRateLimiter(times=10, hours=1)),
+        CustomRateLimiterDepends10,
     ],
 )
 async def logout_route(
     response: Response,
-    data: Annotated[
-        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
-    ],
+    refresh_token_from_db: ValidateRefreshTokenFromCookieDep,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
-    refresh_token_from_db, db = data
     await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
     await clear_auth_cookies_in_response(response)
     return {"message": "Successfully logged out"}
 
 
-@router.post(
-    "/confirm-email", dependencies=[Depends(CustomRateLimiter(times=5, hours=1))]
-)
+@router.post("/confirm-email", dependencies=[CustomRateLimiterDepends5])
 async def confirm_email_route(
-    data: Annotated[
-        tuple[str, str, AsyncSession, Any],
-        Depends(TokenForEmail(is_for_password_reset=False)),
-    ]
+    data: TokenForEmailDep, db: GetDbSessionDep
 ) -> dict[str, str]:
-    token_id, user_id, db, _ = data
+    token_id, user_id = data["id"], data["user_id"]
     await TokenForEmailCRUD(db, is_for_password_reset=False).set_is_used_true(token_id)
     await UserCRUD(db).set_is_email_confirmed_and_is_active_true(user_id)
     return {"message": "Email was confirmed successfully."}
@@ -144,12 +133,12 @@ async def confirm_email_route(
 
 @router.post(
     "/resend-email-confirmation",
-    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+    dependencies=[CustomRateLimiterDepends10],
 )
 async def resend_confirmation_email_route(
-    email: Annotated[EmailStr, Body(embed=True)],
+    email: EmailStrEmbeddedDep,
     background_tasks: BackgroundTasks,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     user = await UserCRUD(db).get_by_email(email)
     if user and not user.is_email_confirmed:
@@ -169,12 +158,12 @@ async def resend_confirmation_email_route(
 
 @router.post(
     "/request-password-reset",
-    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+    dependencies=[CustomRateLimiterDepends10],
 )
 async def request_password_reset(
-    email: Annotated[EmailStr, Body(embed=True)],
+    email: EmailStrEmbeddedDep,
     background_tasks: BackgroundTasks,
-    db: Annotated[AsyncSession, Depends(get_db_session)],
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     user = await UserCRUD(db).get_by_email(email)
     if user and user.is_email_confirmed:
@@ -187,18 +176,14 @@ async def request_password_reset(
     }
 
 
-@router.post(
-    "/reset-password", dependencies=[Depends(CustomRateLimiter(times=10, hours=1))]
-)
+@router.post("/reset-password", dependencies=[CustomRateLimiterDepends10])
 async def reset_password_route(
-    data: Annotated[
-        tuple[str, str, AsyncSession, Any],
-        Depends(TokenForEmail(is_for_password_reset=True)),
-    ],
+    data: TokenForEmailPassResetDep,
     request_data: UserNewPasswordSchema,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     new_password = request_data.password
-    token_id, user_id, db, _ = data
+    token_id, user_id = data["id"], data["user_id"]
     await TokenForEmailCRUD(db, is_for_password_reset=True).set_is_used_true(token_id)
     await UserCRUD(db).update_password(new_password, user_id)
     return {"message": "Password was successfully reset."}
@@ -208,20 +193,15 @@ async def reset_password_route(
     "/archive-account",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(CustomRateLimiter(times=5, hours=1)),
+        CustomRateLimiterDepends5,
     ],
 )
 async def archive_account_route(
     response: Response,
-    data1: Annotated[
-        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
-    ],
-    data2: Annotated[
-        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
-    ],
+    current_user: VerifyPasswordForImportantChangesDep,
+    refresh_token_from_db: ValidateRefreshTokenFromCookieDep,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
-    current_user, db = data1
-    refresh_token_from_db, _ = data2
     await UserCRUD(db).set_is_active_false(str(current_user.id))
     await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
     await clear_auth_cookies_in_response(response)
@@ -232,17 +212,15 @@ async def archive_account_route(
     "/request-email-change",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(CustomRateLimiter(times=10, hours=1)),
+        CustomRateLimiterDepends10,
     ],
 )
 async def request_change_email_route(
-    new_email: Annotated[EmailStr, Body(embed=True)],
-    data: Annotated[
-        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
-    ],
+    new_email: EmailStrEmbeddedDep,
+    current_user: VerifyPasswordForImportantChangesDep,
+    db: GetDbSessionDep,
     background_tasks: BackgroundTasks,
 ) -> dict[str, str]:
-    current_user, db = data
     db_user_by_email = await UserCRUD(db).get_by_email(new_email)
     if db_user_by_email:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -260,15 +238,12 @@ async def request_change_email_route(
 
 @router.post(
     "/confirm-email-change",
-    dependencies=[Depends(CustomRateLimiter(times=10, hours=1))],
+    dependencies=[CustomRateLimiterDepends10],
 )
 async def confirm_email_change_route(
-    data: Annotated[
-        tuple[str, str, AsyncSession, Any],
-        Depends(TokenForEmail(is_for_password_reset=False)),
-    ]
+    data: TokenForEmailDep, db: GetDbSessionDep
 ) -> dict[str, str]:
-    token_id, user_id, db, extra_data = data
+    token_id, user_id, extra_data = (data["id"], data["user_id"], data["extra_data"])
     await TokenForEmailCRUD(db, is_for_password_reset=False).set_is_used_true(token_id)
     await UserCRUD(db).update_email(extra_data["new_email"], user_id)
     return {"message": "Email was confirmed successfully."}
@@ -278,22 +253,17 @@ async def confirm_email_change_route(
     "/change-password",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(CustomRateLimiter(times=5, hours=1)),
+        CustomRateLimiterDepends5,
     ],
 )
 async def change_password_route(
     request_data: UserNewPasswordSchema,
     response: Response,
-    data1: Annotated[
-        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
-    ],
-    data2: Annotated[
-        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
-    ],
+    current_user: VerifyPasswordForImportantChangesDep,
+    refresh_token_from_db: ValidateRefreshTokenFromCookieDep,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     new_password = request_data.password
-    current_user, db = data1
-    refresh_token_from_db, _ = data2
     await UserCRUD(db).update_password(new_password, str(current_user.id))
     await RefreshTokenCRUD(db).set_revoke_status_to_true(str(refresh_token_from_db.id))
     await clear_auth_cookies_in_response(response)
@@ -304,22 +274,17 @@ async def change_password_route(
     "/change-username",
     dependencies=[
         Depends(csrftoken_check),
-        Depends(CustomRateLimiter(times=5, hours=1)),
+        CustomRateLimiterDepends5,
     ],
 )
 async def change_username_route(
     request_data: UserNewUsernameSchema,
     response: Response,
-    data1: Annotated[
-        tuple[User, AsyncSession], Depends(verify_password_for_important_changes)
-    ],
-    data2: Annotated[
-        tuple[RefreshToken, AsyncSession], Depends(validate_refresh_token_from_cookie)
-    ],
+    current_user: VerifyPasswordForImportantChangesDep,
+    refresh_token_from_db: ValidateRefreshTokenFromCookieDep,
+    db: GetDbSessionDep,
 ) -> dict[str, str]:
     new_username = request_data.username
-    current_user, db = data1
-    refresh_token_from_db, _ = data2
     user_crud = UserCRUD(db)
     db_user_by_username = await user_crud.get_by_username(new_username)
     if db_user_by_username:

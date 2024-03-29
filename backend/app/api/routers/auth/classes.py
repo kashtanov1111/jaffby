@@ -126,7 +126,7 @@ class TokenForEmail:
 
     async def __call__(
         self, token: str, db: Annotated[AsyncSession, Depends(get_db_session)]
-    ) -> tuple[str, str, AsyncSession, Any]:
+    ) -> dict[str, Any]:
         """Validates token for email"""
         detail = (
             "Wrong email confirmation token."
@@ -150,9 +150,19 @@ class TokenForEmail:
             extra_data = None
         else:
             extra_data = token_from_db.extra_data
-        return (
-            str(token_from_db.id),
-            str(token_from_db.user_id),
-            db,
-            extra_data,
-        )
+        return {
+            "id": str(token_from_db.id),
+            "user_id": str(token_from_db.user_id),
+            "extra_data": extra_data,
+        }
+
+
+TokenForEmailPassResetDep = Annotated[
+    dict[str, Any],
+    Depends(TokenForEmail(is_for_password_reset=True)),
+]
+
+TokenForEmailDep = Annotated[
+    dict[str, Any],
+    Depends(TokenForEmail(is_for_password_reset=False)),
+]
